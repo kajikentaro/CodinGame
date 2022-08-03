@@ -26,8 +26,8 @@ struct Checkpoint {
 void output_boost(pair<int, int> coordinate) {
   cout << coordinate.first << " " << coordinate.second << " BOOST" << endl;
 }
-void output(pair<int, int> coordinate) {
-  cout << coordinate.first << " " << coordinate.second << " 100" << endl;
+void output(pair<int, int> coordinate, int thrust) {
+  cout << coordinate.first << " " << coordinate.second << " " << thrust << endl;
 }
 
 int boost_timing = -1;
@@ -68,16 +68,18 @@ int gcd(int a, int b) {
   return gcd(b, a % b);
 }
 
+int sqrt_dist(int x, int y) { return sqrt(pow(x, 2) + pow(y, 2)); }
+
 // Fx : Fy の比を返す
-pair<int, int> calc_power_balance(double dist_x, double dist_y, double v_y0,
-                                  double v_x0) {
-  int child = v_x0 * dist_y + v_y0 * dist_x;
-  int mother = v_x0 * v_y0;
-  if (child == 0 && mother == 0) return {0, 0};
-  if (child == 0) return {100, 0};
-  if (mother == 0) return {0, 100};
-  int g = gcd(child, mother);
-  return {mother / g, child / g};
+pair<int, int> calc_power_balance(int dist_x, int dist_y, int v_x0, int v_y0) {
+  int time = 0;
+  if (sqrt_dist(v_x0, v_y0) != 0) {
+    sqrt_dist(dist_x, dist_y) * 1.8 / sqrt_dist(v_x0, v_y0);
+  }
+  int Fx = dist_x - v_x0 * time;
+  int Fy = dist_y - v_y0 * time;
+  cerr << dist_x << " " << v_x0 << " " << dist_y << " " << v_y0 << endl;
+  return {Fx, Fy};
 }
 
 int pre_x = 1e9, pre_y = 1e9;
@@ -90,8 +92,15 @@ pair<int, int> calc_target_coordinate(int x, int y, int target_x,
   pre_x = x;
   pre_y = y;
   pair<int, int> p = calc_power_balance(dist_x, dist_y, speed_x, speed_y);
-  cerr << p.first << " " << p.second << " " << x << " " << y << endl;
   return {x + p.first, y + p.second};
+}
+
+int calc_thrust(int next_checkpoint_angle) {
+  // 0 ~ 1
+  double angle_closeness = 1 - abs((double)next_checkpoint_angle) / 180;
+
+  if (angle_closeness > 0.5) return 100;
+  return 0;
 }
 
 int main() {
@@ -127,11 +136,12 @@ int main() {
     // i.e.: "x y thrust"
     pair<int, int> target_coordinate =
         calc_target_coordinate(x, y, next_checkpoint.x, next_checkpoint.y);
+    int thrust = calc_thrust(next_checkpoint_angle);
     if (lap_no == 1 && boost_timing == target_no &&
         abs(next_checkpoint_angle) < 30) {
       output_boost(target_coordinate);
     } else {
-      output(target_coordinate);
+      output(target_coordinate, thrust);
     }
   }
 }
