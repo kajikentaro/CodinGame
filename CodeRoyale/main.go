@@ -82,47 +82,61 @@ func getUnitList(numUnits int) ([]Unit, Unit) {
 	return unitList, queen
 }
 
-var waitingTrain int = 0
+// 末尾が新しい
+var trainingHistory []int
 
 func calcTrainingSite(siteList []Site, gold int) []Site {
 	VARRACKS_TYPE := 3
-	var isTrainable = make([]bool, VARRACKS_TYPE)
-	var trainableObj = make([]Site, VARRACKS_TYPE)
+	var isSiteTrainable = make([]bool, VARRACKS_TYPE)
+	var siteObj = make([]Site, VARRACKS_TYPE)
 	for _, val := range siteList {
 		if val.owner == 0 && val.structureType == 2 {
-			if isTrainable[val.param2] {
+			if isSiteTrainable[val.param2] {
 				continue
 			}
-			isTrainable[val.param2] = true
-			trainableObj[val.param2] = val
+			isSiteTrainable[val.param2] = true
+			siteObj[val.param2] = val
 		}
 	}
 
-	setNextWaiting := func() {
-		for i := 0; i < VARRACKS_TYPE; i++ {
-			waitingTrain = (waitingTrain + 1) % 3
-			if isTrainable[waitingTrain] {
-				break
-			}
+	for _, val := range trainingHistory {
+		// val == ARCHER
+		if val == 1 {
+			// アーチャーの2回目はつくらない
+			isSiteTrainable[1] = false
+		}
+	}
+
+	// 末尾のほうが優先度が高い
+	var potentialCandidate []int
+
+	// 履歴があるものをpotentialClientに追加する
+	for i := len(trainingHistory) - 1; i >= 0; i-- {
+		varracksType := trainingHistory[i]
+		if isSiteTrainable[varracksType] {
+			potentialCandidate = append(potentialCandidate, varracksType)
+			isSiteTrainable[varracksType] = false
+		}
+	}
+	// 履歴がないものをpotentialClientに追加する
+	for varracksType := 0; varracksType < VARRACKS_TYPE; varracksType++ {
+		if isSiteTrainable[varracksType] {
+			potentialCandidate = append(potentialCandidate, varracksType)
 		}
 	}
 
 	TRAIN_COST := []int{80, 100, 140}
-	log(waitingTrain)
-	log(TRAIN_COST[waitingTrain], gold, TRAIN_COST[waitingTrain] > gold)
-	log([]Site{trainableObj[waitingTrain]})
-	if isTrainable[waitingTrain] == false {
-		// 訓練予定のサイトが存在しないとき
-		setNextWaiting()
-		return []Site{}
-	} else if TRAIN_COST[waitingTrain] > gold {
-		// お金が足りずに待機するとき
-		return []Site{}
-	} else {
-		// 予定通り訓練できるとき
-		defer setNextWaiting()
-		return []Site{trainableObj[waitingTrain]}
+	var response []Site
+	costSum := 0
+	for i := len(potentialCandidate) - 1; i >= 0; i-- {
+		val := potentialCandidate[i]
+		costSum += TRAIN_COST[val]
+		if costSum <= gold {
+			trainingHistory = append(trainingHistory, val)
+			response = append(response, siteObj[val])
+		}
 	}
+	return response
 }
 
 func min(a, b int) int {
