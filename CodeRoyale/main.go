@@ -19,6 +19,10 @@ type Unit struct {
 	x, y, owner, unitType, health int
 }
 
+func distUnit(a Unit, b Unit) int {
+	return (a.x-b.x)*(a.x-b.x) + (a.y-b.y)*(a.y-b.y)
+}
+
 func dist(a Site, b Unit) int {
 	return (a.x-b.x)*(a.x-b.x) + (a.y-b.y)*(a.y-b.y)
 }
@@ -156,7 +160,20 @@ func log(data ...any) {
 	fmt.Fprintf(os.Stderr, "%+v\n", data)
 }
 
-func calcBuildingSite(siteList []Site) (Site, string, error) {
+// KNIGHTの攻撃を受けている最中かどうか
+func isUnderAttack(queen Unit, unitList []Unit) bool {
+	for _, val := range unitList {
+		if val.owner == 1 && val.unitType == 0 {
+			dist := distUnit(queen, val)
+			if dist < 30*30+10 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func calcBuildingSite(siteList []Site, isUnderAttack bool) (Site, string, error) {
 	// 作れるサイトが余るときは末尾が採用される
 	decideStructure := func(idx int) string {
 		buildingPriority := []string{"BARRACKS-ARCHER", "MINE", "BARRACKS-KNIGHT", "TOWER", "MINE", "TOWER"}
@@ -171,7 +188,7 @@ func calcBuildingSite(siteList []Site) (Site, string, error) {
 			break
 		}
 		if val.owner == -1 {
-			if decideStructure(idx) == "MINE" && val.gold == 0 {
+			if decideStructure(idx) == "MINE" && (val.gold == 0 || isUnderAttack) {
 				continue
 			}
 			targetSite = val
@@ -241,11 +258,11 @@ func main() {
 		fmt.Scan(&numUnits)
 
 		//unitList, queen := getUnitList(numUnits)
-		_, queen := getUnitList(numUnits)
+		unitList, queen := getUnitList(numUnits)
 
 		updateSiteList(numSites, siteList, queen, newSiteList)
 
-		targetSite, targetType, err := calcBuildingSite(siteList)
+		targetSite, targetType, err := calcBuildingSite(siteList, isUnderAttack(queen, unitList))
 
 		if err == nil {
 			fmt.Println("BUILD", targetSite.siteId, targetType)
