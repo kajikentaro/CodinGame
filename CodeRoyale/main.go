@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -11,7 +12,7 @@ import (
  * the standard input according to the problem statement.
  **/
 type Site struct {
-	siteId, x, y, radius, ignore1, ignore2, structureType, owner, param1, param2, dist int
+	siteId, x, y, radius, gold, maxMineSize, structureType, owner, param1, param2, dist int
 }
 
 type Unit struct {
@@ -26,11 +27,16 @@ func updateSiteList(numSites int, siteList []Site, queen Unit, tmpList []Site) {
 	for si := 0; si < numSites; si++ {
 		for ti := 0; ti < numSites; ti++ {
 			if tmpList[ti].siteId == siteList[si].siteId {
-				siteList[si].ignore2 = tmpList[ti].ignore2
+				// NOTE: バグ？goldが0になったり-1になったりする
+				if siteList[si].gold != 0 {
+					siteList[si].gold = tmpList[ti].gold
+				}
+				siteList[si].maxMineSize = tmpList[ti].maxMineSize
 				siteList[si].structureType = tmpList[ti].structureType
 				siteList[si].owner = tmpList[ti].owner
 				siteList[si].param1 = tmpList[ti].param1
 				siteList[si].param2 = tmpList[ti].param2
+
 			}
 		}
 	}
@@ -48,15 +54,15 @@ func updateSiteList(numSites int, siteList []Site, queen Unit, tmpList []Site) {
 func inputSiteList(numSites int) []Site {
 	tmpList := make([]Site, numSites)
 	for i := 0; i < numSites; i++ {
-		// ignore1: used in future leagues
-		// ignore2: used in future leagues
+		// gold: 発掘できる残りの金
+		// maxMineSize: used in future leagues
 		// structureType: -1 = No structure, 2 = Barracks
 		// owner: -1 = No structure, 0 = Friendly, 1 = Enemy
 		var siteId int
 		fmt.Scan(&siteId)
 		site := &tmpList[siteId]
 		site.siteId = siteId
-		fmt.Scan(&site.ignore1, &site.ignore2, &site.structureType, &site.owner, &site.param1, &site.param2)
+		fmt.Scan(&site.gold, &site.maxMineSize, &site.structureType, &site.owner, &site.param1, &site.param2)
 	}
 	return tmpList
 }
@@ -102,6 +108,9 @@ func calcTrainingSite(siteList []Site, gold int) []Site {
 	}
 
 	TRAIN_COST := []int{80, 100, 140}
+	log(waitingTrain)
+	log(TRAIN_COST[waitingTrain], gold, TRAIN_COST[waitingTrain] > gold)
+	log([]Site{trainableObj[waitingTrain]})
 	if isTrainable[waitingTrain] == false {
 		// 訓練予定のサイトが存在しないとき
 		setNextWaiting()
@@ -111,7 +120,7 @@ func calcTrainingSite(siteList []Site, gold int) []Site {
 		return []Site{}
 	} else {
 		// 予定通り訓練できるとき
-		setNextWaiting()
+		defer setNextWaiting()
 		return []Site{trainableObj[waitingTrain]}
 	}
 }
@@ -129,6 +138,70 @@ func max(a, b int) int {
 	return a
 }
 
+func log(data ...any) {
+	fmt.Fprintf(os.Stderr, "%+v\n", data)
+}
+
+func calcBuildingSite(siteList []Site) (Site, string, error) {
+	// 作れるサイトが余るときは末尾が採用される
+	decideStructure := func(idx int) string {
+		buildingPriority := []string{"BARRACKS-ARCHER", "MINE", "BARRACKS-KNIGHT", "TOWER", "MINE", "TOWER"}
+		return buildingPriority[min(len(buildingPriority)-1, idx)]
+	}
+
+	// まだ建築されていないサイトが有るときは優先して作る
+	var targetSite Site
+	structureType := ""
+	for idx, val := range siteList {
+		if idx >= len(siteList)/3 {
+			break
+		}
+		if val.owner == -1 {
+			if decideStructure(idx) == "MINE" && val.gold == 0 {
+				continue
+			}
+			targetSite = val
+			structureType = decideStructure(idx)
+			break
+		}
+	}
+	if structureType != "" {
+		return targetSite, structureType, nil
+	}
+
+	// 鉱山がレベルアップ可能なときは優先してレベルアップ
+	for idx, val := range siteList {
+		// owner == 自分 && structureType == 鉱山 && 採掘可能goldが0でない
+		if val.owner == 0 && (val.structureType == 0) {
+			if val.param1 < val.maxMineSize {
+				targetSite = val
+				structureType = decideStructure(idx)
+				break
+			} else {
+				continue
+			}
+		}
+	}
+	if structureType != "" {
+		return targetSite, structureType, nil
+	}
+
+	// タワーがレベルアップ可能なときは優先してレベルアップ
+	for idx, val := range siteList {
+		// owner == 自分 && structureType == タワー
+		if val.owner == 0 && (val.structureType == 1) {
+			targetSite = val
+			structureType = decideStructure(idx)
+			break
+		}
+	}
+	if structureType != "" {
+		return targetSite, structureType, nil
+	}
+
+	return Site{}, "", errors.New("可能な行動が存在しません")
+}
+
 func main() {
 	var numSites int
 	fmt.Scan(&numSites)
@@ -139,6 +212,8 @@ func main() {
 		var site Site
 		fmt.Scan(&site.siteId, &site.x, &site.y, &site.radius)
 		siteList[site.siteId] = site
+		// NOTE: バグ？-1になったり0になったりすることがある
+		siteList[site.siteId].gold = -1
 	}
 
 	for {
@@ -156,40 +231,16 @@ func main() {
 
 		updateSiteList(numSites, siteList, queen, newSiteList)
 
-		var targetSite Site
-		targetIdx := -1
-		for idx, val := range siteList {
-			if idx >= len(siteList)/3 {
-				break
-			}
-			if val.owner != 0 {
-				targetSite = val
-				targetIdx = idx
-				break
-			}
-		}
+		targetSite, targetType, err := calcBuildingSite(siteList)
 
-		if targetIdx == -1 {
-			for idx, val := range siteList {
-				if val.owner == 0 && (val.structureType == 0) {
-					targetSite = val
-					targetIdx = idx
-					break
-				}
-			}
-		}
-
-		buildings := []string{"BARRACKS-KNIGHT", "MINE", "TOWER"}
-		fmt.Fprintln(os.Stderr, targetIdx)
-		if targetIdx != -1 {
-			fmt.Println("BUILD", targetSite.siteId, buildings[min(2, targetIdx)])
+		if err == nil {
+			fmt.Println("BUILD", targetSite.siteId, targetType)
 		} else {
 			fmt.Println("MOVE", siteList[0].x, siteList[0].y)
 		}
 
-		// fmt.Fprintln(os.Stderr, "Debug messages...")
-
 		trainingSite := calcTrainingSite(siteList, gold)
+		log(trainingSite)
 
 		outputStr := "TRAIN"
 		for _, t := range trainingSite {
