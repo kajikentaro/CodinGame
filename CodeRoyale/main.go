@@ -1,6 +1,7 @@
 package main
 
 import (
+	"container/heap"
 	"errors"
 	"fmt"
 	"os"
@@ -23,8 +24,72 @@ func distUnit(a Unit, b Unit) int {
 	return (a.x-b.x)*(a.x-b.x) + (a.y-b.y)*(a.y-b.y)
 }
 
+func distSite(a Site, b Site) int {
+	return (a.x-b.x)*(a.x-b.x) + (a.y-b.y)*(a.y-b.y)
+}
+
 func dist(a Site, b Unit) int {
 	return (a.x-b.x)*(a.x-b.x) + (a.y-b.y)*(a.y-b.y)
+}
+
+type HeapItem struct {
+	idx, distSum int
+}
+
+type PairHeap []*HeapItem
+
+func (h PairHeap) Len() int           { return len(h) }
+func (h PairHeap) Less(i, j int) bool { return h[i].distSum < h[j].distSum }
+func (h PairHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *PairHeap) Push(x any) {
+	*h = append(*h, x.(*HeapItem))
+}
+func (h *PairHeap) Pop() any {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
+}
+
+func dike(siteList []Site) {
+	n := len(siteList)
+	path := make([][]int, n)
+	for i := 0; i < n; i++ {
+		path[i] = make([]int, n)
+	}
+	for i := 0; i < n; i++ {
+		for j := i + 1; j < n; j++ {
+			path[i][j] = distSite(siteList[i], siteList[j])
+		}
+	}
+
+	pq := make(PairHeap, n)
+	res := make([]int, n)
+	for i := range res {
+		res[i] = -1
+	}
+	heap.Init(&pq)
+	pq.Push(HeapItem{0, 0})
+
+	for {
+		if pq.Len() == 0 {
+			break
+		}
+		now := (pq.Pop()).(*HeapItem)
+		if res[now.idx] != -1 {
+			continue
+		}
+		res[now.idx] = 
+		for i, p := range path[now.idx] {
+			if res[i] != -1 {
+				continue
+			}
+			pq.Push(HeapItem{i, now.distSum + p})
+		}
+	}
+
+
 }
 
 func updateSiteList(numSites int, siteList []Site, queen Unit, tmpList []Site) {
@@ -45,6 +110,7 @@ func updateSiteList(numSites int, siteList []Site, queen Unit, tmpList []Site) {
 		}
 	}
 
+	// 初回のみ
 	if siteList[0].dist == 0 && siteList[1].dist == 0 {
 		for i := 0; i < len(siteList); i++ {
 			siteList[i].dist = dist(siteList[i], queen)
@@ -71,7 +137,7 @@ func inputSiteList(numSites int) []Site {
 	return tmpList
 }
 
-func getUnitList(numUnits int) ([]Unit, Unit) {
+func inputUnitList(numUnits int) ([]Unit, Unit) {
 	var queen Unit
 
 	unitList := make([]Unit, numUnits)
@@ -233,6 +299,8 @@ func calcBuildingSite(siteList []Site, isUnderAttack bool) (Site, string, error)
 	return Site{}, "", errors.New("可能な行動が存在しません")
 }
 
+// func calcBuildingStrategy(siteList){
+
 func main() {
 	var numSites int
 	fmt.Scan(&numSites)
@@ -257,8 +325,7 @@ func main() {
 		var numUnits int
 		fmt.Scan(&numUnits)
 
-		//unitList, queen := getUnitList(numUnits)
-		unitList, queen := getUnitList(numUnits)
+		unitList, queen := inputUnitList(numUnits)
 
 		updateSiteList(numSites, siteList, queen, newSiteList)
 
