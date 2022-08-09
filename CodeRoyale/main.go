@@ -23,6 +23,10 @@ func distUnit(a Unit, b Unit) int {
 	return (a.x-b.x)*(a.x-b.x) + (a.y-b.y)*(a.y-b.y)
 }
 
+func distSite(a Site, b Site) int {
+	return (a.x-b.x)*(a.x-b.x) + (a.y-b.y)*(a.y-b.y)
+}
+
 func dist(a Site, b Unit) int {
 	return (a.x-b.x)*(a.x-b.x) + (a.y-b.y)*(a.y-b.y)
 }
@@ -45,6 +49,7 @@ func updateSiteList(numSites int, siteList []Site, queen Unit, tmpList []Site) {
 		}
 	}
 
+	// 初回のみ
 	if siteList[0].dist == 0 && siteList[1].dist == 0 {
 		for i := 0; i < len(siteList); i++ {
 			siteList[i].dist = dist(siteList[i], queen)
@@ -52,6 +57,8 @@ func updateSiteList(numSites int, siteList []Site, queen Unit, tmpList []Site) {
 		sort.Slice(siteList, func(i, j int) bool {
 			return siteList[i].dist < siteList[j].dist
 		})
+
+		log(travelingSalesman(siteList[0 : len(siteList)/3]))
 	}
 }
 
@@ -84,6 +91,88 @@ func getUnitList(numUnits int) ([]Unit, Unit) {
 		}
 	}
 	return unitList, queen
+}
+
+func pow(a, b int) int {
+	if b == 0 {
+		return 1
+	}
+	res := 1
+	if b%2 == 1 {
+		res *= a
+		b--
+	}
+	k := pow(a, b/2)
+	res *= k
+	res *= k
+	return res
+}
+
+func travelingSalesman(siteList []Site) []int {
+	n := len(siteList)
+	s := 0
+
+	type P struct {
+		first, second int
+	}
+
+	path := make([][]P, n)
+	for i := 0; i < n; i++ {
+		path[i] = make([]P, n-1)
+	}
+	for i := 0; i < n; i++ {
+		for j := 0; j < n; j++ {
+			j2 := j
+			if i == j {
+				continue
+			} else if i < j {
+				j2--
+			}
+			path[i][j2].first = distSite(siteList[i], siteList[j])
+			path[i][j2].second = j
+		}
+	}
+
+	inf := int(1e18)
+
+	dp := make([][]int, pow(2, n))
+	for i := range dp {
+		dp[i] = make([]int, n)
+		for j := range dp[i] {
+			dp[i][j] = inf
+		}
+	}
+
+	dp_log := make([][][]int, pow(2, n))
+	for i := range dp_log {
+		dp_log[i] = make([][]int, n)
+	}
+	for _, i := range path[s] {
+		w := i.first
+		next := i.second
+		dp[1<<next][next] = w
+		dp_log[1<<next][next] = []int{s, next}
+	}
+	for i := 0; i < pow(2, n); i++ {
+		for j := 0; j < n; j++ {
+			if ((1 << j) & i) == 0 {
+				continue
+			}
+			for _, tmp := range path[j] {
+				w := tmp.first
+				next := tmp.second
+				next_status := i | (1 << next)
+				if next_status == i {
+					continue
+				}
+				if dp[next_status][next] > w+dp[i][j] {
+					dp[next_status][next] = w + dp[i][j]
+					dp_log[next_status][next] = append(dp_log[i][j], next)
+				}
+			}
+		}
+	}
+	return dp_log[pow(2, n)-1][s]
 }
 
 // 末尾が新しい
@@ -157,7 +246,11 @@ func max(a, b int) int {
 }
 
 func log(data ...any) {
-	fmt.Fprintf(os.Stderr, "%+v\n", data)
+	fmt.Fprintf(os.Stderr, "%+v\n", data...)
+}
+
+func log2(data ...any) {
+	fmt.Fprintln(os.Stderr, data...)
 }
 
 // KNIGHTの攻撃を受けている最中かどうか
@@ -271,7 +364,6 @@ func main() {
 		}
 
 		trainingSite := calcTrainingSite(siteList, gold)
-		log(trainingSite)
 
 		outputStr := "TRAIN"
 		for _, t := range trainingSite {
