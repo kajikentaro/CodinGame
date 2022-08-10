@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -12,8 +11,26 @@ import (
  * the standard input according to the problem statement.
  **/
 type Site struct {
-	siteId, x, y, radius, gold, maxMineSize, structureType, owner, param1, param2, dist int
+	siteId                                                                      SiteId
+	x, y, radius, gold, maxMineSize, structureType, owner, param1, param2, dist int
 }
+
+type SiteId int
+
+type BuildOrder struct {
+	siteId        SiteId
+	structureType StructureType
+}
+
+type StructureType string
+
+const (
+	BARRACKS_KNIGHT = StructureType("BARRACKS-KNIGHT")
+	BARRACKS_ARCHER = StructureType("BARRACKS-ARCHER")
+	BARRACKS_GIANT  = StructureType("BARRACKS-GIANT")
+	TOWER           = StructureType("TOWER")
+	MINE            = StructureType("MINE")
+)
 
 type Unit struct {
 	x, y, owner, unitType, health int
@@ -31,35 +48,23 @@ func dist(a Site, b Unit) int {
 	return (a.x-b.x)*(a.x-b.x) + (a.y-b.y)*(a.y-b.y)
 }
 
-func updateSiteList(numSites int, siteList []Site, queen Unit, tmpList []Site) {
+func updateSiteList(numSites int, idToSite []Site, queen Unit, tmpList []Site) []Site {
 	for si := 0; si < numSites; si++ {
 		for ti := 0; ti < numSites; ti++ {
-			if tmpList[ti].siteId == siteList[si].siteId {
+			if tmpList[ti].siteId == idToSite[si].siteId {
 				// NOTE: バグ？goldが0になったり-1になったりする
-				if siteList[si].gold != 0 {
-					siteList[si].gold = tmpList[ti].gold
+				if idToSite[si].gold != 0 {
+					idToSite[si].gold = tmpList[ti].gold
 				}
-				siteList[si].maxMineSize = tmpList[ti].maxMineSize
-				siteList[si].structureType = tmpList[ti].structureType
-				siteList[si].owner = tmpList[ti].owner
-				siteList[si].param1 = tmpList[ti].param1
-				siteList[si].param2 = tmpList[ti].param2
-
+				idToSite[si].maxMineSize = tmpList[ti].maxMineSize
+				idToSite[si].structureType = tmpList[ti].structureType
+				idToSite[si].owner = tmpList[ti].owner
+				idToSite[si].param1 = tmpList[ti].param1
+				idToSite[si].param2 = tmpList[ti].param2
 			}
 		}
 	}
-
-	// 初回のみ
-	if siteList[0].dist == 0 && siteList[1].dist == 0 {
-		for i := 0; i < len(siteList); i++ {
-			siteList[i].dist = dist(siteList[i], queen)
-		}
-		sort.Slice(siteList, func(i, j int) bool {
-			return siteList[i].dist < siteList[j].dist
-		})
-
-		log(travelingSalesman(siteList[0 : len(siteList)/3]))
-	}
+	return idToSite
 }
 
 func inputSiteList(numSites int) []Site {
@@ -69,7 +74,7 @@ func inputSiteList(numSites int) []Site {
 		// maxMineSize: used in future leagues
 		// structureType: -1 = No structure, 2 = Barracks
 		// owner: -1 = No structure, 0 = Friendly, 1 = Enemy
-		var siteId int
+		var siteId SiteId
 		fmt.Scan(&siteId)
 		site := &tmpList[siteId]
 		site.siteId = siteId
@@ -108,8 +113,8 @@ func pow(a, b int) int {
 	return res
 }
 
-func travelingSalesman(siteList []Site) []int {
-	n := len(siteList)
+func travelingSalesman(nearSiteList []*Site) []SiteId {
+	n := len(nearSiteList)
 	s := 0
 
 	type P struct {
@@ -118,18 +123,12 @@ func travelingSalesman(siteList []Site) []int {
 
 	path := make([][]P, n)
 	for i := 0; i < n; i++ {
-		path[i] = make([]P, n-1)
-	}
-	for i := 0; i < n; i++ {
 		for j := 0; j < n; j++ {
-			j2 := j
 			if i == j {
 				continue
-			} else if i < j {
-				j2--
 			}
-			path[i][j2].first = distSite(siteList[i], siteList[j])
-			path[i][j2].second = j
+			p := P{distSite(*nearSiteList[i], *nearSiteList[j]), j}
+			path[i] = append(path[i], p)
 		}
 	}
 
@@ -146,6 +145,9 @@ func travelingSalesman(siteList []Site) []int {
 	dp_log := make([][][]int, pow(2, n))
 	for i := range dp_log {
 		dp_log[i] = make([][]int, n)
+		for j := range dp_log[i] {
+			dp_log[i][j] = []int{}
+		}
 	}
 	for _, i := range path[s] {
 		w := i.first
@@ -167,22 +169,28 @@ func travelingSalesman(siteList []Site) []int {
 				}
 				if dp[next_status][next] > w+dp[i][j] {
 					dp[next_status][next] = w + dp[i][j]
-					dp_log[next_status][next] = append(dp_log[i][j], next)
+					dp_log[next_status][next] = make([]int, len(dp_log[i][j])+1)
+					copy(dp_log[next_status][next], append(dp_log[i][j], next))
 				}
 			}
 		}
 	}
-	return dp_log[pow(2, n)-1][s]
+
+	siteIdList := []SiteId{}
+	for _, val := range dp_log[pow(2, int(n))-1][s] {
+		siteIdList = append(siteIdList, nearSiteList[val].siteId)
+	}
+	return siteIdList
 }
 
 // 末尾が新しい
 var trainingHistory []int
 
-func calcTrainingSite(siteList []Site, gold int) []Site {
+func calcTrainingSite(idToSite []Site, gold int) []Site {
 	VARRACKS_TYPE := 3
 	var isSiteTrainable = make([]bool, VARRACKS_TYPE)
 	var siteObj = make([]Site, VARRACKS_TYPE)
-	for _, val := range siteList {
+	for _, val := range idToSite {
 		if val.owner == 0 && val.structureType == 2 {
 			if isSiteTrainable[val.param2] {
 				continue
@@ -266,83 +274,163 @@ func isUnderAttack(queen Unit, unitList []Unit) bool {
 	return false
 }
 
-func calcBuildingSite(siteList []Site, isUnderAttack bool) (Site, string, error) {
-	// 作れるサイトが余るときは末尾が採用される
-	decideStructure := func(idx int) string {
-		buildingPriority := []string{"BARRACKS-ARCHER", "MINE", "BARRACKS-KNIGHT", "TOWER", "MINE", "TOWER"}
-		return buildingPriority[min(len(buildingPriority)-1, idx)]
-	}
+func decideBuildType(buildOrderList []BuildOrder, idToSite []Site, unitList []Unit) StructureType {
+	return "TOWER"
 
-	// まだ建築されていないサイトが有るときは優先して作る
-	var targetSite Site
-	structureType := ""
-	for idx, val := range siteList {
-		if idx >= len(siteList)/3 {
-			break
+	/*
+
+		// 作れるサイトが余るときは末尾が採用される
+		decideStructure := func(idx int) string {
+			buildingPriority := []string{"BARRACKS-ARCHER", "MINE", "BARRACKS-KNIGHT", "TOWER", "MINE", "TOWER"}
+			return buildingPriority[min(len(buildingPriority)-1, idx)]
 		}
-		if val.owner == -1 {
-			if decideStructure(idx) == "MINE" && (val.gold == 0 || isUnderAttack) {
-				continue
+
+
+		// まだ建築されていないサイトが有るときは優先して作る
+		var targetSite Site
+		structureType := ""
+		for idx, val := range idToSite {
+			if idx >= len(idToSite)/3 {
+				break
 			}
-			targetSite = val
-			structureType = decideStructure(idx)
-			break
-		}
-	}
-	if structureType != "" {
-		return targetSite, structureType, nil
-	}
-
-	// 鉱山がレベルアップ可能なときは優先してレベルアップ
-	for idx, val := range siteList {
-		// owner == 自分 && structureType == 鉱山 && 採掘可能goldが0でない
-		if val.owner == 0 && (val.structureType == 0) {
-			if val.param1 < val.maxMineSize {
+			if val.owner == -1 {
+				if decideStructure(idx) == "MINE" && (val.gold == 0 || isUnderAttack) {
+					continue
+				}
 				targetSite = val
 				structureType = decideStructure(idx)
 				break
-			} else {
-				continue
 			}
 		}
-	}
-	if structureType != "" {
-		return targetSite, structureType, nil
+		if structureType != "" {
+			return targetSite, structureType, nil
+		}
+
+		// 鉱山がレベルアップ可能なときは優先してレベルアップ
+		for idx, val := range idToSite {
+			// owner == 自分 && structureType == 鉱山 && 採掘可能goldが0でない
+			if val.owner == 0 && (val.structureType == 0) {
+				if val.param1 < val.maxMineSize {
+					targetSite = val
+					structureType = decideStructure(idx)
+					break
+				} else {
+					continue
+				}
+			}
+		}
+		if structureType != "" {
+			return targetSite, structureType, nil
+		}
+
+		// タワーがレベルアップ可能なときは優先してレベルアップ
+		for idx, val := range idToSite {
+			// owner == 自分 && structureType == タワー
+			if val.owner == 0 && (val.structureType == 1) {
+				targetSite = val
+				structureType = decideStructure(idx)
+				break
+			}
+		}
+		if structureType != "" {
+			return targetSite, structureType, nil
+		}
+
+		return Site{}, "", errors.New("可能な行動が存在しません")
+	*/
+}
+
+func calcOptimalRoute(idToSite []Site, nearSiteList []*Site, queen Unit, buildOrderList []BuildOrder) ([]BuildOrder, []*Site) {
+	// 初回
+	if len(nearSiteList) == 0 {
+		type Marker struct {
+			idx  int
+			dist int
+		}
+		distIdxMarker := make([]Marker, len(idToSite))
+
+		for i := 0; i < len(idToSite); i++ {
+			distIdxMarker[i].dist = dist(idToSite[i], queen)
+			distIdxMarker[i].idx = i
+		}
+		sort.Slice(distIdxMarker, func(i, j int) bool {
+			return distIdxMarker[i].dist < distIdxMarker[j].dist
+		})
+
+		nearSiteList = make([]*Site, len(idToSite)/3)
+		for idx, v := range distIdxMarker {
+			if idx >= len(idToSite)/3 {
+				break
+			}
+			nearSiteList[idx] = &idToSite[v.idx]
+		}
+
+		optimalRouteIdx := travelingSalesman(nearSiteList)
+		for _, r := range optimalRouteIdx {
+			buildOrder := BuildOrder{}
+			buildOrder.siteId = idToSite[r].siteId
+			buildOrderList = append(buildOrderList, buildOrder)
+		}
+		return buildOrderList, nearSiteList
 	}
 
-	// タワーがレベルアップ可能なときは優先してレベルアップ
-	for idx, val := range siteList {
-		// owner == 自分 && structureType == タワー
-		if val.owner == 0 && (val.structureType == 1) {
-			targetSite = val
-			structureType = decideStructure(idx)
-			break
+	// siteIdがbuildOrderに含まれているかどうか判定する関数
+	isScheduled := func(buildOrderList []BuildOrder, siteId SiteId) bool {
+		for _, v := range buildOrderList {
+			if v.siteId == siteId {
+				return true
+			}
+		}
+		return false
+	}
+
+	// 1/3のidToSiteで、自分の所有でない&buildOrderに含まれていないものを buildOrderの末尾に追加する
+	// TODO 常に末尾は効率が悪い
+	for _, v := range nearSiteList {
+		if v.owner == -1 && !isScheduled(buildOrderList, v.siteId) {
+			newBuildOrder := BuildOrder{}
+			newBuildOrder.siteId = v.siteId
+			buildOrderList = append(buildOrderList, newBuildOrder)
 		}
 	}
-	if structureType != "" {
-		return targetSite, structureType, nil
-	}
 
-	return Site{}, "", errors.New("可能な行動が存在しません")
+	// buildOrderListの中の更地ではないものを削除する(先頭のみ)
+	removeLength := 0
+	for _, v := range buildOrderList {
+		if idToSite[v.siteId].owner == -1 {
+			break
+		} else {
+			removeLength++
+			log(v)
+		}
+	}
+	buildOrderList = buildOrderList[removeLength:]
+
+	return buildOrderList, nearSiteList
 }
 
 func main() {
 	var numSites int
 	fmt.Scan(&numSites)
 
-	siteList := make([]Site, numSites)
+	idToSite := make([]Site, numSites)
+	var nearSiteList []*Site
+
+	// サイトを回る順番
+	buildOrderList := []BuildOrder{}
 
 	for i := 0; i < numSites; i++ {
 		var site Site
 		fmt.Scan(&site.siteId, &site.x, &site.y, &site.radius)
-		siteList[site.siteId] = site
+		idToSite[site.siteId] = site
 		// NOTE: バグ？-1になったり0になったりすることがある
-		siteList[site.siteId].gold = -1
+		idToSite[site.siteId].gold = -1
 	}
 
 	for {
 		// touchedSite: -1 if none
-		var gold, touchedSite int
+		var gold int
+		var touchedSite SiteId
 		fmt.Scan(&gold, &touchedSite)
 
 		newSiteList := inputSiteList(numSites)
@@ -350,20 +438,22 @@ func main() {
 		var numUnits int
 		fmt.Scan(&numUnits)
 
-		//unitList, queen := getUnitList(numUnits)
 		unitList, queen := getUnitList(numUnits)
 
-		updateSiteList(numSites, siteList, queen, newSiteList)
+		idToSite = updateSiteList(numSites, idToSite, queen, newSiteList)
 
-		targetSite, targetType, err := calcBuildingSite(siteList, isUnderAttack(queen, unitList))
+		buildOrderList, nearSiteList = calcOptimalRoute(idToSite, nearSiteList, queen, buildOrderList)
 
-		if err == nil {
-			fmt.Println("BUILD", targetSite.siteId, targetType)
+		if len(buildOrderList) == 0 {
+			fmt.Println("MOVE", nearSiteList[0].x, nearSiteList[0].y)
+		} else if touchedSite == buildOrderList[0].siteId {
+			fmt.Println("BUILD", buildOrderList[0].siteId, decideBuildType(buildOrderList, idToSite, unitList))
+			buildOrderList = buildOrderList[1:]
 		} else {
-			fmt.Println("MOVE", siteList[0].x, siteList[0].y)
+			fmt.Println("BUILD", buildOrderList[0].siteId, "MINE")
 		}
 
-		trainingSite := calcTrainingSite(siteList, gold)
+		trainingSite := calcTrainingSite(idToSite, gold)
 
 		outputStr := "TRAIN"
 		for _, t := range trainingSite {
