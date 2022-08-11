@@ -177,7 +177,10 @@ func travelingSalesman(nearSiteList []*Site) []SiteId {
 	}
 
 	siteIdList := []SiteId{}
-	for _, val := range dp_log[pow(2, int(n))-1][s] {
+	for idx, val := range dp_log[pow(2, int(n))-1][s] {
+		if idx == n-1 {
+			break
+		}
 		siteIdList = append(siteIdList, nearSiteList[val].siteId)
 	}
 	return siteIdList
@@ -274,8 +277,73 @@ func isUnderAttack(queen Unit, unitList []Unit) bool {
 	return false
 }
 
-func decideBuildType(buildOrderList []BuildOrder, idToSite []Site, unitList []Unit) StructureType {
-	return "TOWER"
+var continousCnt int
+var preTouchedId SiteId = -1
+
+func decideBuildType(buildOrderList []BuildOrder, idToSite []Site, unitList []Unit, touchedSite SiteId) (StructureType, bool) {
+	friendly := map[StructureType]int{}
+	enemy := map[StructureType]int{}
+	if preTouchedId == touchedSite {
+		continousCnt++
+	} else {
+		continousCnt = 0
+	}
+	defer func() {
+		preTouchedId = touchedSite
+	}()
+
+	for _, site := range idToSite {
+		var structureType StructureType
+		if site.structureType == 0 {
+			structureType = "MINE"
+		}
+		if site.structureType == 1 {
+			structureType = "TOWER"
+		}
+		if site.structureType == 2 {
+			if site.param2 == 0 {
+				structureType = "BARRACKS-KNIGHT"
+			}
+			if site.param2 == 1 {
+				structureType = "BARRACKS-ARCHER"
+			}
+			if site.param2 == 2 {
+				structureType = "BARRACKS-GIANT"
+			}
+		}
+		if site.owner == 0 {
+			friendly[structureType]++
+		}
+		if site.owner == 1 {
+			enemy[structureType]++
+		}
+	}
+
+	if friendly["BARRACKS-KNIGHT"] == 0 {
+		return "BARRACKS-KNIGHT", true
+	}
+
+	targetSite := idToSite[buildOrderList[0].siteId]
+	if (friendly["MINE"] < 3 || idToSite[touchedSite].structureType == 0) && targetSite.gold != 0 {
+		if continousCnt > 1 && targetSite.owner != 0 {
+			return "TOWER", false
+		}
+		if targetSite.param1 < targetSite.maxMineSize {
+			// まだ強化できるとき
+			return "MINE", false
+		} else {
+			return "MINE", true
+		}
+	}
+
+	if enemy["TOWER"] > 3 && continousCnt == 0 && friendly["BARRACKS-GIANT"] == 0 {
+		return "BARRACKS-GIANT", true
+	}
+
+	if continousCnt < 3 {
+		return "TOWER", false
+	}
+	return "TOWER", true
 
 	/*
 
@@ -384,7 +452,7 @@ func calcOptimalRoute(idToSite []Site, nearSiteList []*Site, queen Unit, buildOr
 		return false
 	}
 
-	// 1/3のidToSiteで、自分の所有でない&buildOrderに含まれていないものを buildOrderの末尾に追加する
+	// 1/3のidToSiteで、更地&buildOrderに含まれていないものを buildOrderの末尾に追加する
 	// TODO 常に末尾は効率が悪い
 	for _, v := range nearSiteList {
 		if v.owner == -1 && !isScheduled(buildOrderList, v.siteId) {
@@ -394,14 +462,13 @@ func calcOptimalRoute(idToSite []Site, nearSiteList []*Site, queen Unit, buildOr
 		}
 	}
 
-	// buildOrderListの中の更地ではないものを削除する(先頭のみ)
+	// buildOrderListの中の敵のサイトを削除する(先頭のみ)
 	removeLength := 0
 	for _, v := range buildOrderList {
-		if idToSite[v.siteId].owner == -1 {
-			break
-		} else {
+		if idToSite[v.siteId].owner == 1 {
 			removeLength++
-			log(v)
+		} else {
+			break
 		}
 	}
 	buildOrderList = buildOrderList[removeLength:]
@@ -445,11 +512,17 @@ func main() {
 		buildOrderList, nearSiteList = calcOptimalRoute(idToSite, nearSiteList, queen, buildOrderList)
 
 		if len(buildOrderList) == 0 {
+			// サイトがすべて構築済みの場合
 			fmt.Println("MOVE", nearSiteList[0].x, nearSiteList[0].y)
 		} else if touchedSite == buildOrderList[0].siteId {
-			fmt.Println("BUILD", buildOrderList[0].siteId, decideBuildType(buildOrderList, idToSite, unitList))
-			buildOrderList = buildOrderList[1:]
+			// サイトを建設する場合
+			buildType, isPopBuildOrder := decideBuildType(buildOrderList, idToSite, unitList, touchedSite)
+			fmt.Println("BUILD", buildOrderList[0].siteId, buildType)
+			if isPopBuildOrder {
+				buildOrderList = buildOrderList[1:]
+			}
 		} else {
+			// サイトに向かって移動する場合
 			fmt.Println("BUILD", buildOrderList[0].siteId, "MINE")
 		}
 
