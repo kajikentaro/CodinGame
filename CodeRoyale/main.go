@@ -24,6 +24,11 @@ type BuildOrder struct {
 
 type StructureType string
 
+// すべての敷地のうち何割を構築目標とするか
+func BUILD_RATIO(allSiteSize int) int {
+	return allSiteSize / 3
+}
+
 const (
 	BARRACKS_KNIGHT = StructureType("BARRACKS-KNIGHT")
 	BARRACKS_ARCHER = StructureType("BARRACKS-ARCHER")
@@ -286,7 +291,7 @@ func decideBuildType(buildOrderList []BuildOrder, idToSite []Site, unitList []Un
 	if preTouchedId == touchedSite {
 		continousCnt++
 	} else {
-		continousCnt = 0
+		continousCnt = 1
 	}
 	defer func() {
 		preTouchedId = touchedSite
@@ -294,6 +299,12 @@ func decideBuildType(buildOrderList []BuildOrder, idToSite []Site, unitList []Un
 
 	for _, site := range idToSite {
 		var structureType StructureType
+
+		// 今建設中(レベルアップ中)のものは数に入れない
+		if site.siteId == buildOrderList[0].siteId {
+			continue
+		}
+
 		if site.structureType == 0 {
 			structureType = "MINE"
 		}
@@ -319,28 +330,28 @@ func decideBuildType(buildOrderList []BuildOrder, idToSite []Site, unitList []Un
 		}
 	}
 
-	if friendly["BARRACKS-KNIGHT"] == 0 {
+	targetSite := idToSite[buildOrderList[0].siteId]
+
+	if friendly["MINE"] <= 1 && targetSite.gold >= 50 {
+		// 最大まで強化したとき または 作ったのにすぐ壊されたとき
+		if targetSite.param1 == targetSite.maxMineSize || (continousCnt > 1 && targetSite.owner != 0) {
+			return "MINE", true
+		}
+		return "MINE", false
+	}
+
+	if friendly["BARRACKS-KNIGHT"] <= 0 {
 		return "BARRACKS-KNIGHT", true
 	}
 
-	targetSite := idToSite[buildOrderList[0].siteId]
-	if (friendly["MINE"] < 3 || idToSite[touchedSite].structureType == 0) && targetSite.gold != 0 {
-		if continousCnt > 1 && targetSite.owner != 0 {
-			return "TOWER", false
-		}
-		if targetSite.param1 < targetSite.maxMineSize {
-			// まだ強化できるとき
-			return "MINE", false
-		} else {
-			return "MINE", true
-		}
-	}
-
-	if enemy["TOWER"] > 3 && continousCnt == 0 && friendly["BARRACKS-GIANT"] == 0 {
+	if enemy["TOWER"] >= 3 && friendly["BARRACKS-GIANT"] == 0 && continousCnt == 0 {
 		return "BARRACKS-GIANT", true
 	}
 
-	if continousCnt < 3 {
+	if friendly["TOWER"] <= 5 {
+		if continousCnt == 4 {
+			return "TOWER", true
+		}
 		return "TOWER", false
 	}
 	return "TOWER", true
@@ -358,7 +369,7 @@ func decideBuildType(buildOrderList []BuildOrder, idToSite []Site, unitList []Un
 		var targetSite Site
 		structureType := ""
 		for idx, val := range idToSite {
-			if idx >= len(idToSite)/3 {
+			if idx >= len(idToSite)*BUILD_RATIO {
 				break
 			}
 			if val.owner == -1 {
@@ -425,9 +436,9 @@ func calcOptimalRoute(idToSite []Site, nearSiteList []*Site, queen Unit, buildOr
 			return distIdxMarker[i].dist < distIdxMarker[j].dist
 		})
 
-		nearSiteList = make([]*Site, len(idToSite)/3)
+		nearSiteList = make([]*Site, BUILD_RATIO(len(idToSite)))
 		for idx, v := range distIdxMarker {
-			if idx >= len(idToSite)/3 {
+			if idx >= BUILD_RATIO(len(idToSite)) {
 				break
 			}
 			nearSiteList[idx] = &idToSite[v.idx]
@@ -452,7 +463,7 @@ func calcOptimalRoute(idToSite []Site, nearSiteList []*Site, queen Unit, buildOr
 		return false
 	}
 
-	// 1/3のidToSiteで、更地&buildOrderに含まれていないものを buildOrderの末尾に追加する
+	// 更地&buildOrderに含まれていないものを buildOrderの末尾に追加する
 	// TODO 常に末尾は効率が悪い
 	for _, v := range nearSiteList {
 		if v.owner == -1 && !isScheduled(buildOrderList, v.siteId) {
