@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"sort"
 )
@@ -10,16 +11,35 @@ import (
  * Auto-generated code below aims at helping you parse
  * the standard input according to the problem statement.
  **/
+type PointF struct {
+	x, y float64
+}
+
+func (p *PointF) equal(q PointF) bool {
+	if math.Abs(p.x-q.x) < 1e-5 && math.Abs(p.y-q.y) < 1e-5 {
+		return true
+	}
+	return false
+}
+
+type Point struct {
+	x, y int
+}
+
+func (p *Point) float() PointF {
+	return PointF{float64(p.x), float64(p.y)}
+}
+
 type Site struct {
-	siteId                                                                      SiteId
-	x, y, radius, gold, maxMineSize, structureType, owner, param1, param2, dist int
+	siteId                                                                SiteId
+	p                                                                     Point
+	radius, gold, maxMineSize, structureType, owner, param1, param2, dist int
 }
 
 type SiteId int
 
 type BuildOrder struct {
-	siteId        SiteId
-	structureType StructureType
+	siteId SiteId
 }
 
 type StructureType string
@@ -38,18 +58,11 @@ const (
 )
 
 type Unit struct {
-	x, y, owner, unitType, health int
+	p                       Point
+	owner, unitType, health int
 }
 
-func distUnit(a Unit, b Unit) int {
-	return (a.x-b.x)*(a.x-b.x) + (a.y-b.y)*(a.y-b.y)
-}
-
-func distSite(a Site, b Site) int {
-	return (a.x-b.x)*(a.x-b.x) + (a.y-b.y)*(a.y-b.y)
-}
-
-func dist(a Site, b Unit) int {
+func dist(a, b Point) int {
 	return (a.x-b.x)*(a.x-b.x) + (a.y-b.y)*(a.y-b.y)
 }
 
@@ -95,7 +108,7 @@ func getUnitList(numUnits int) ([]Unit, Unit) {
 	for i := 0; i < numUnits; i++ {
 		// unitType: -1 = QUEEN, 0 = KNIGHT, 1 = ARCHER
 		unit := &unitList[i]
-		fmt.Scan(&unit.x, &unit.y, &unit.owner, &unit.unitType, &unit.health)
+		fmt.Scan(&unit.p.x, &unit.p.y, &unit.owner, &unit.unitType, &unit.health)
 		if unit.owner == 0 && unit.unitType == -1 {
 			queen = *unit
 		}
@@ -132,7 +145,7 @@ func travelingSalesman(nearSiteList []*Site) []SiteId {
 			if i == j {
 				continue
 			}
-			p := P{distSite(*nearSiteList[i], *nearSiteList[j]), j}
+			p := P{dist(nearSiteList[i].p, nearSiteList[j].p), j}
 			path[i] = append(path[i], p)
 		}
 	}
@@ -273,7 +286,7 @@ func log2(data ...any) {
 func isUnderAttack(queen Unit, unitList []Unit) bool {
 	for _, val := range unitList {
 		if val.owner == 1 && val.unitType == 0 {
-			dist := distUnit(queen, val)
+			dist := dist(queen.p, val.p)
 			if dist < 30*30+10 {
 				return true
 			}
@@ -284,6 +297,33 @@ func isUnderAttack(queen Unit, unitList []Unit) bool {
 
 var continousCnt int
 var preTouchedId SiteId = -1
+
+// ベクトルoa, obの外積を計算する
+func calcCrossProduct(a Point, b PointF, o Point) float64 {
+	af := a.float()
+	of := o.float()
+	return ((af.x-of.x)*(b.y-of.y) - (af.y-of.y)*(b.x-of.x))
+}
+
+func calcContact(start, circle PointF, r float64) (PointF, PointF) {
+	start.x -= circle.x
+	start.y -= circle.y
+
+	r2 := math.Pow(r, 2)
+	r4 := math.Pow(r, 4)
+	a := start.x
+	b := start.y
+	a2 := math.Pow(a, 2)
+	b2 := math.Pow(b, 2)
+	b4 := math.Pow(b, 4)
+
+	root := math.Sqrt(-b2*r4 + a2*b2*r2 + b4*r2)
+	x1 := (a*r2 + root) / (a2 + b2)
+	y1 := (r2 - x1*a) / b
+	x2 := (a*r2 - root) / (a2 + b2)
+	y2 := (r2 - x2*a) / b
+	return PointF{x1 + circle.x, y1 + circle.y}, PointF{x2 + circle.x, y2 + circle.y}
+}
 
 func decideBuildType(buildOrderList []BuildOrder, idToSite []Site, unitList []Unit, touchedSite SiteId) (StructureType, bool) {
 	friendly := map[StructureType]int{}
@@ -355,68 +395,30 @@ func decideBuildType(buildOrderList []BuildOrder, idToSite []Site, unitList []Un
 		return "TOWER", false
 	}
 	return "TOWER", true
+}
 
-	/*
-
-		// 作れるサイトが余るときは末尾が採用される
-		decideStructure := func(idx int) string {
-			buildingPriority := []string{"BARRACKS-ARCHER", "MINE", "BARRACKS-KNIGHT", "TOWER", "MINE", "TOWER"}
-			return buildingPriority[min(len(buildingPriority)-1, idx)]
-		}
-
-
-		// まだ建築されていないサイトが有るときは優先して作る
-		var targetSite Site
-		structureType := ""
-		for idx, val := range idToSite {
-			if idx >= len(idToSite)*BUILD_RATIO {
-				break
-			}
-			if val.owner == -1 {
-				if decideStructure(idx) == "MINE" && (val.gold == 0 || isUnderAttack) {
-					continue
-				}
-				targetSite = val
-				structureType = decideStructure(idx)
-				break
-			}
-		}
-		if structureType != "" {
-			return targetSite, structureType, nil
-		}
-
-		// 鉱山がレベルアップ可能なときは優先してレベルアップ
-		for idx, val := range idToSite {
-			// owner == 自分 && structureType == 鉱山 && 採掘可能goldが0でない
-			if val.owner == 0 && (val.structureType == 0) {
-				if val.param1 < val.maxMineSize {
-					targetSite = val
-					structureType = decideStructure(idx)
-					break
-				} else {
-					continue
-				}
-			}
-		}
-		if structureType != "" {
-			return targetSite, structureType, nil
-		}
-
-		// タワーがレベルアップ可能なときは優先してレベルアップ
-		for idx, val := range idToSite {
-			// owner == 自分 && structureType == タワー
-			if val.owner == 0 && (val.structureType == 1) {
-				targetSite = val
-				structureType = decideStructure(idx)
-				break
-			}
-		}
-		if structureType != "" {
-			return targetSite, structureType, nil
-		}
-
-		return Site{}, "", errors.New("可能な行動が存在しません")
-	*/
+func calcOptimalCoordinate(buildOrderList []BuildOrder, idToSite []Site, queen Unit) PointF {
+	if len(buildOrderList) <= 1 {
+		target := idToSite[buildOrderList[0].siteId]
+		return target.p.float()
+	}
+	nextCircle := idToSite[buildOrderList[0].siteId]
+	ans1, ans2 := calcContact(queen.p.float(), nextCircle.p.float(), float64(nextCircle.radius))
+	cc1 := calcCrossProduct(queen.p, ans1, nextCircle.p)
+	cc2 := calcCrossProduct(queen.p, ans2, nextCircle.p)
+	cc0 := calcCrossProduct(queen.p, idToSite[buildOrderList[1].siteId].p.float(), nextCircle.p)
+	if cc1*cc0 > 0 {
+		return ans1
+	}
+	if cc2*cc0 > 0 {
+		return ans2
+	}
+	if cc0 == 0 {
+		return ans1
+	}
+	log("an error occered in calcOptimalCoordinate", cc0, cc1, cc2)
+	os.Exit(1)
+	return PointF{}
 }
 
 func calcOptimalRoute(idToSite []Site, nearSiteList []*Site, queen Unit, buildOrderList []BuildOrder) ([]BuildOrder, []*Site) {
@@ -429,7 +431,7 @@ func calcOptimalRoute(idToSite []Site, nearSiteList []*Site, queen Unit, buildOr
 		distIdxMarker := make([]Marker, len(idToSite))
 
 		for i := 0; i < len(idToSite); i++ {
-			distIdxMarker[i].dist = dist(idToSite[i], queen)
+			distIdxMarker[i].dist = dist(idToSite[i].p, queen.p)
 			distIdxMarker[i].idx = i
 		}
 		sort.Slice(distIdxMarker, func(i, j int) bool {
@@ -499,7 +501,7 @@ func main() {
 
 	for i := 0; i < numSites; i++ {
 		var site Site
-		fmt.Scan(&site.siteId, &site.x, &site.y, &site.radius)
+		fmt.Scan(&site.siteId, &site.p.x, &site.p.y, &site.radius)
 		idToSite[site.siteId] = site
 		// NOTE: バグ？-1になったり0になったりすることがある
 		idToSite[site.siteId].gold = -1
@@ -524,7 +526,7 @@ func main() {
 
 		if len(buildOrderList) == 0 {
 			// サイトがすべて構築済みの場合
-			fmt.Println("MOVE", nearSiteList[0].x, nearSiteList[0].y)
+			fmt.Println("MOVE", nearSiteList[0].p.x, nearSiteList[0].p.y)
 		} else if touchedSite == buildOrderList[0].siteId {
 			// サイトを建設する場合
 			buildType, isPopBuildOrder := decideBuildType(buildOrderList, idToSite, unitList, touchedSite)
@@ -534,7 +536,9 @@ func main() {
 			}
 		} else {
 			// サイトに向かって移動する場合
-			fmt.Println("BUILD", buildOrderList[0].siteId, "MINE")
+			p := calcOptimalCoordinate(buildOrderList, idToSite, queen)
+			// サイトに向かって移動する場合
+			fmt.Println("MOVE", math.Round(p.x), math.Round(p.y))
 		}
 
 		trainingSite := calcTrainingSite(idToSite, gold)
