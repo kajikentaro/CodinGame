@@ -7,6 +7,8 @@ import (
 	"sort"
 )
 
+// 23.11
+
 /**
  * Auto-generated code below aims at helping you parse
  * the standard input according to the problem statement.
@@ -469,6 +471,9 @@ func calcOptimalRoute(idToSite []Site, nearSiteList []*Site, queen Unit, buildOr
 	// 更地&buildOrderに含まれていないものを buildOrderの末尾に追加する
 	// TODO 常に末尾は効率が悪い
 	for _, v := range nearSiteList {
+		if v.dist >= 150000 {
+			continue
+		}
 		if v.owner == -1 && !isScheduled(buildOrderList, v.siteId) {
 			newBuildOrder := BuildOrder{}
 			newBuildOrder.siteId = v.siteId
