@@ -532,7 +532,8 @@ func main() {
 
 		if len(buildOrderList) == 0 {
 			// サイトがすべて構築済みの場合
-			fmt.Println("MOVE", nearSiteList[0].p.x, nearSiteList[0].p.y)
+			// fmt.Println("MOVE", nearSiteList[0].p.x, nearSiteList[0].p.y)
+			fmt.Println("BUILD", nearSiteList[0].siteId, "TOWER")
 		} else if touchedSite == buildOrderList[0].siteId {
 			// サイトを建設する場合
 			buildType, isPopBuildOrder := decideBuildType(buildOrderList, idToSite, unitList, touchedSite)
