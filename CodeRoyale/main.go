@@ -372,7 +372,7 @@ func decideBuildType(buildOrderList []BuildOrder, idToSite []Site, unitList []Un
 
 	targetSite := idToSite[buildOrderList[0].siteId]
 
-	if friendly["MINE"] <= 1 && targetSite.gold >= 50 {
+	if friendly["MINE"] <= 2 && targetSite.gold >= 50 {
 		// 最大まで強化したとき または 作ったのにすぐ壊されたとき
 		if targetSite.param1 == targetSite.maxMineSize || (continousCnt > 1 && targetSite.owner != 0) {
 			return "MINE", true
@@ -432,6 +432,7 @@ func calcOptimalRoute(idToSite []Site, nearSiteList []*Site, queen Unit, buildOr
 
 		for i := 0; i < len(idToSite); i++ {
 			distIdxMarker[i].dist = dist(idToSite[i].p, queen.p)
+			idToSite[i].dist = distIdxMarker[i].dist
 			distIdxMarker[i].idx = i
 		}
 		sort.Slice(distIdxMarker, func(i, j int) bool {
