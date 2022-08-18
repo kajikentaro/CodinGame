@@ -8,6 +8,7 @@ import (
 )
 
 // 23.11
+// 23.40
 
 /**
  * Auto-generated code below aims at helping you parse
@@ -341,6 +342,15 @@ func isWin(unitList []Unit) bool {
 	return enemyQueen.health < friendlyQueen.health
 }
 
+func isNearEnemy(site Site, unitList []Unit) bool {
+	for _, val := range unitList {
+		if val.owner == 1 && val.unitType == 0 && dist(site.p, val.p) < 10000 {
+			return true
+		}
+	}
+	return false
+}
+
 func decideBuildType(buildOrderList []BuildOrder, idToSite []Site, unitList []Unit, touchedSite SiteId) (StructureType, bool) {
 	friendly := map[StructureType]int{}
 	enemy := map[StructureType]int{}
@@ -388,7 +398,7 @@ func decideBuildType(buildOrderList []BuildOrder, idToSite []Site, unitList []Un
 
 	targetSite := idToSite[buildOrderList[0].siteId]
 
-	if friendly["MINE"] <= 2 && targetSite.gold >= 50 && !isWin(unitList) {
+	if friendly["MINE"] <= 2 && targetSite.gold >= 50 && !isWin(unitList) && !isNearEnemy(targetSite, unitList) {
 		// 最大まで強化したとき または 作ったのにすぐ壊されたとき
 		if targetSite.param1 == targetSite.maxMineSize || (continousCnt > 1 && targetSite.owner != 0) {
 			return "MINE", true
