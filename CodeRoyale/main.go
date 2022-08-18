@@ -322,6 +322,7 @@ func calcContact(start, circle PointF, r float64) (PointF, PointF) {
 	y1 := (r2 - x1*a) / b
 	x2 := (a*r2 - root) / (a2 + b2)
 	y2 := (r2 - x2*a) / b
+
 	return PointF{x1 + circle.x, y1 + circle.y}, PointF{x2 + circle.x, y2 + circle.y}
 }
 
@@ -466,8 +467,7 @@ func calcOptimalCoordinate(buildOrderList []BuildOrder, idToSite []Site, queen U
 		return ans1
 	}
 	log("an error occered in calcOptimalCoordinate", cc0, cc1, cc2)
-	os.Exit(1)
-	return PointF{}
+	return nextCircle.p.float()
 }
 
 func calcOptimalRoute(idToSite []Site, nearSiteList []*Site, queen Unit, buildOrderList []BuildOrder) ([]BuildOrder, []*Site) {
