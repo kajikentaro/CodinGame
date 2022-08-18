@@ -298,9 +298,6 @@ func isUnderAttack(queen Unit, unitList []Unit) bool {
 	return false
 }
 
-var continousCnt int
-var preTouchedId SiteId = -1
-
 // ベクトルoa, obの外積を計算する
 func calcCrossProduct(a Point, b PointF, o Point) float64 {
 	af := a.float()
@@ -344,14 +341,19 @@ func isWin(unitList []Unit) bool {
 
 func isNearEnemy(site Site, unitList []Unit) bool {
 	for _, val := range unitList {
-		if val.owner == 1 && val.unitType == 0 && dist(site.p, val.p) < 10000 {
+		if val.owner == 1 && val.unitType == 0 && dist(site.p, val.p) < 400000 {
 			return true
 		}
 	}
 	return false
 }
 
+var continousCnt int
+var preTouchedId SiteId = -1
+
 func decideBuildType(buildOrderList []BuildOrder, idToSite []Site, unitList []Unit, touchedSite SiteId) (StructureType, bool) {
+	var nowBuildingType StructureType
+
 	friendly := map[StructureType]int{}
 	enemy := map[StructureType]int{}
 	if preTouchedId == touchedSite {
@@ -365,11 +367,6 @@ func decideBuildType(buildOrderList []BuildOrder, idToSite []Site, unitList []Un
 
 	for _, site := range idToSite {
 		var structureType StructureType
-
-		// 今建設中(レベルアップ中)のものは数に入れない
-		if site.siteId == buildOrderList[0].siteId {
-			continue
-		}
 
 		if site.structureType == 0 {
 			structureType = "MINE"
@@ -388,6 +385,11 @@ func decideBuildType(buildOrderList []BuildOrder, idToSite []Site, unitList []Un
 				structureType = "BARRACKS-GIANT"
 			}
 		}
+		// 今建設中(レベルアップ中)のものは数に入れない
+		if site.siteId == buildOrderList[0].siteId {
+			nowBuildingType = structureType
+			continue
+		}
 		if site.owner == 0 {
 			friendly[structureType]++
 		}
@@ -398,15 +400,39 @@ func decideBuildType(buildOrderList []BuildOrder, idToSite []Site, unitList []Un
 
 	targetSite := idToSite[buildOrderList[0].siteId]
 
-	if friendly["MINE"] <= 2 && targetSite.gold >= 50 && !isWin(unitList) && !isNearEnemy(targetSite, unitList) {
-		// 最大まで強化したとき または 作ったのにすぐ壊されたとき
-		if targetSite.param1 == targetSite.maxMineSize || (continousCnt > 1 && targetSite.owner != 0) {
+	/** 前回作ったものを強化するここから **/
+	if nowBuildingType == "MINE" {
+		if targetSite.param1 >= targetSite.maxMineSize-1 {
+			// 最大まで強化したとき
 			return "MINE", true
 		}
 		return "MINE", false
 	}
 
-	if friendly["BARRACKS-KNIGHT"] <= 0 {
+	if nowBuildingType == "TOWER" {
+		if continousCnt == 4 {
+			return "TOWER", true
+		}
+		return "TOWER", false
+	}
+	/** 強化ここまで **/
+
+	if friendly["TOWER"] == 0 && friendly["BARRACKS-KNIGHT"] == 0 && enemy["BARRACKS-KNIGHT"] > 0 && isNearEnemy(targetSite, unitList) {
+		return "TOWER", false
+	}
+
+	if friendly["MINE"] <= 2 && targetSite.gold >= 50 && !isWin(unitList) && !isNearEnemy(targetSite, unitList) {
+		// 作ったのにすぐ壊されたとき
+		if continousCnt > 1 && targetSite.owner != 0 {
+			// なにもしない
+		} else if targetSite.maxMineSize == 1 {
+			return "MINE", true
+		} else {
+			return "MINE", false
+		}
+	}
+
+	if friendly["BARRACKS-KNIGHT"] == 0 {
 		return "BARRACKS-KNIGHT", true
 	}
 
@@ -415,12 +441,9 @@ func decideBuildType(buildOrderList []BuildOrder, idToSite []Site, unitList []Un
 	}
 
 	if friendly["TOWER"] <= 5 {
-		if continousCnt == 4 {
-			return "TOWER", true
-		}
 		return "TOWER", false
 	}
-	return "TOWER", true
+	return "TOWER", false
 }
 
 func calcOptimalCoordinate(buildOrderList []BuildOrder, idToSite []Site, queen Unit) PointF {
@@ -556,7 +579,6 @@ func main() {
 
 		if len(buildOrderList) == 0 {
 			// サイトがすべて構築済みの場合
-			// fmt.Println("MOVE", nearSiteList[0].p.x, nearSiteList[0].p.y)
 			fmt.Println("BUILD", nearSiteList[0].siteId, "TOWER")
 		} else if touchedSite == buildOrderList[0].siteId {
 			// サイトを建設する場合
